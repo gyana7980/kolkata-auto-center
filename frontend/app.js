@@ -528,7 +528,7 @@ $("sendOtpBtn").addEventListener("click", async (e) => {
   try {
     await api("/auth/request-otp", { method: "POST", body: { email, name } });
     showOtpStep();
-    toast("OTP generated. Check the backend terminal.");
+    toast("OTP sent to your mail id.");
   } catch (err) {
     $("loginOverlay").classList.add("open");
     toast(err.message);
