@@ -445,3 +445,14 @@ th { color: var(--gray); font-size: 0.78rem; text-transform: uppercase; }
   position: absolute; top: -6px; right: -6px; background: var(--primary); color: white;
   border-radius: 999px; font-size: 0.7rem; padding: 1px 6px; font-weight: 700;
 }
+
+.support-panel {
+  max-width: 1200px;
+  margin: 0 auto 32px;
+  padding: 20px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.support-panel h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.support-panel p { margin: 0 0 14px; color: var(--gray); }
+.support-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }

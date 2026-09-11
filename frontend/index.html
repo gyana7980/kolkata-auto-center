@@ -178,7 +178,8 @@
             <input id="newProdSku" type="text" placeholder="SKU (e.g., BS-909)" />
             <input id="newProdPrice" type="number" step="0.01" placeholder="Price (₹)" />
             <input id="newProdStock" type="number" placeholder="Initial Stock" />
-            <input id="newProdImage" type="url" placeholder="Product image URL (optional)" />
+            <input id="newProdImage" type="file" accept="image/*" />
+            <img id="newProdImagePreview" class="hidden" alt="Selected product preview" style="width: 100%; max-width: 180px; height: 100px; object-fit: contain; border: 1px solid #e4e4e7; border-radius: 8px; background: white;" />
             <button id="addProductBtn" class="btn" type="button">Add Product</button>
           </div>
         </div>

@@ -568,6 +568,25 @@ $("navDashboardBtn").addEventListener("click", async () => {
   await loadOwnerOrders();
 });
 $("closeOwnerBtn").addEventListener("click", () => $("ownerOverlay").classList.remove("open"));
+let newProductImageData = "";
+$("newProdImage").addEventListener("change", () => {
+  const file = $("newProdImage").files[0];
+  const preview = $("newProdImagePreview");
+  if (!file) {
+    newProductImageData = "";
+    preview.src = "";
+    preview.classList.add("hidden");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    newProductImageData = reader.result;
+    preview.src = newProductImageData;
+    preview.classList.remove("hidden");
+  };
+  reader.readAsDataURL(file);
+});
 $("addProductBtn").addEventListener("click", async () => {
   const product = {
     name: $("newProdName").value.trim(),
@@ -575,7 +594,7 @@ $("addProductBtn").addEventListener("click", async () => {
     sku: $("newProdSku").value.trim(),
     price: parseFloat($("newProdPrice").value),
     stock: parseInt($("newProdStock").value, 10),
-    image: $("newProdImage").value.trim(),
+    image: newProductImageData,
   };
 
   if (!product.name || !product.category || !product.sku || isNaN(product.price) || isNaN(product.stock)) {
@@ -585,8 +604,12 @@ $("addProductBtn").addEventListener("click", async () => {
 
   try {
     await api("/products", { method: "POST", auth: true, body: product });
-    ["newProdName", "newProdCategory", "newProdSku", "newProdPrice", "newProdStock", "newProdImage"]
+    ["newProdName", "newProdCategory", "newProdSku", "newProdPrice", "newProdStock" ]
       .forEach(id => $(id).value = "");
+    $("newProdImage").value = "";
+    newProductImageData = "";
+    $("newProdImagePreview").src = "";
+    $("newProdImagePreview").classList.add("hidden");
     toast("Product added");
     await loadOwnerProducts();
     await loadProducts();
