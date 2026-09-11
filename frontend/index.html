@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kolkata Auto Center</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="style.css" />
+  <!-- jsPDF for direct PDF invoice generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <!-- Header / Navigation -->
+  <header class="navbar">
+    <div class="brand">
+      <div class="logo">KAC</div>
+      <div>
+        <h1>Kolkata Auto Center</h1>
+        <p class="tagline">Genuine Motorcycle & Auto Spares</p>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <input id="searchInput" type="text" placeholder="Search parts, SKU, category..." />
+      <select id="categorySelect">
+        <option value="All">All Categories</option>
+      </select>
+    </div>
+
+    <nav class="nav-links">
+      <button id="navOrdersBtn" class="btn secondary hidden" type="button">My Orders</button>
+      <button id="navDashboardBtn" class="btn secondary hidden" type="button">Owner Dashboard</button>
+      <button id="navLoginBtn" class="btn" type="button">Login</button>
+      <div id="userBadge" class="user-badge hidden">
+        <span id="userNameDisplay"></span>
+        <button id="logoutBtn" class="link-btn" type="button">Logout</button>
+      </div>
+      <button id="cartBtn" class="btn cart-btn hidden" type="button">
+        Cart <span id="cartCount" class="badge">0</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- Main Catalog View -->
+  <main class="container">
+    <section id="bannerSection" class="banner">
+      <h2>Welcome to Kolkata Auto Center</h2>
+      <p>Original OEM & aftermarket auto parts with express pickup and door delivery.</p>
+    </section>
+
+    <div id="productGrid" class="product-grid">
+      <!-- Injected by app.js -->
+    </div>
+  </main>
+
+  <!-- Login / OTP Overlay Modal -->
+  <div id="loginOverlay" class="overlay">
+    <div class="dialog">
+      <div class="dialog-header">
+        <h3 id="loginTitle">Login with Email OTP</h3>
+        <button class="icon-close" id="closeLoginBtn" type="button">&times;</button>
+      </div>
+
+      <!-- Step 1: Request OTP -->
+      <div id="loginStep1" class="form-body">
+        <label>Your Name</label>
+        <input id="loginName" type="text" placeholder="Enter your name" />
+
+        <label>Email Address</label>
+        <input id="loginEmail" type="email" placeholder="Enter your email address" />
+
+        <p class="help-text"></p>
+        <div class="modal-actions">
+          <button id="cancelLoginBtn" class="btn secondary" type="button">Cancel</button>
+          <button id="sendOtpBtn" class="btn" type="button">Send OTP</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Enter OTP -->
+      <div id="loginStep2" class="form-body hidden">
+        <label>Enter 6-Digit OTP</label>
+        <input id="loginOtp" type="text" maxlength="6" placeholder="123456" />
+
+        <p class="help-text"></p>
+        <div class="modal-actions">
+          <button id="backLoginBtn" class="btn secondary" type="button">Back</button>
+          <button id="verifyOtpBtn" class="btn" type="button">Verify & Login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cart & Checkout Modal -->
+  <div id="cartOverlay" class="overlay">
+    <div class="dialog">
+      <div class="dialog-header">
+        <h3 id="cartDialogTitle">Shopping Cart</h3>
+        <button class="icon-close" id="closeCartBtn" type="button">&times;</button>
+      </div>
+
+      <div id="cartItemsContainer" class="cart-items">
+        <!-- Injected by app.js -->
+      </div>
+
+      <div class="cart-footer">
+        <div class="total-row">
+          <span>Total:</span>
+          <span id="cartTotalDisplay">₹0.00</span>
+        </div>
+        <button id="checkoutProceedBtn" class="btn block" type="button">Proceed to Checkout</button>
+      </div>
+
+      <!-- Checkout Details Form -->
+      <div id="checkoutFormSection" class="form-body hidden">
+        <hr />
+        <h4>Delivery & Payment Information</h4>
+        <label>Contact Phone</label>
+        <input id="orderPhone" type="tel" inputmode="numeric" required placeholder="Enter contact number" />
+
+        <label>Delivery Address</label>
+        <textarea id="orderAddress" rows="2" required placeholder="Street, landmark, city, postal code"></textarea>
+
+        <label>Payment Method</label>
+        <select id="paymentMethodSelect" required>
+          <option value="Cash on Delivery">Cash on Delivery</option>
+          <option value="UPI">UPI Transfer</option>
+        </select>
+
+        <div id="upiFieldSection" class="hidden">
+          <div class="upi-payment-box">
+            <p>Scan this QR code to pay</p>
+            <img src="assets/Gyana Qr.jpeg" alt="UPI payment QR code" />
+          </div>
+          <label>UPI UTR / Reference Number</label>
+          <input id="orderUtr" type="text" inputmode="numeric" maxlength="12" required placeholder="12-digit UTR number" />
+          <label>Transaction ID</label>
+          <input id="orderTransactionId" type="text" required placeholder="Enter transaction ID" />
+        </div>
+
+        <button id="submitOrderBtn" class="btn block" type="button">Confirm & Place Order</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer Orders Overlay -->
+  <div id="ordersOverlay" class="overlay">
+    <div class="dialog large">
+      <div class="dialog-header">
+        <h3>My Orders</h3>
+        <button class="icon-close" id="closeOrdersBtn" type="button">&times;</button>
+      </div>
+      <div id="ordersList" class="order-list">
+        <!-- Injected by app.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Owner Dashboard Overlay -->
+  <div id="ownerOverlay" class="overlay">
+    <div class="dialog extra-large">
+      <div class="dialog-header">
+        <h3>Owner Management Dashboard</h3>
+        <button class="icon-close" id="closeOwnerBtn" type="button">&times;</button>
+      </div>
+
+      <div class="dashboard-tabs">
+        <button id="tabInventoryBtn" class="tab-btn active" type="button">Inventory & Stock</button>
+        <button id="tabOrdersBtn" class="tab-btn" type="button">Customer Orders</button>
+      </div>
+
+      <!-- Inventory Tab -->
+      <div id="ownerInventoryTab" class="tab-panel">
+        <div class="add-box">
+          <h4>Add New Product</h4>
+          <div class="grid-form">
+            <input id="newProdName" type="text" placeholder="Part Name (e.g., Brake Shoes)" />
+            <input id="newProdCategory" type="text" placeholder="Category (e.g., Brakes)" />
+            <input id="newProdSku" type="text" placeholder="SKU (e.g., BS-909)" />
+            <input id="newProdPrice" type="number" step="0.01" placeholder="Price (₹)" />
+            <input id="newProdStock" type="number" placeholder="Initial Stock" />
+            <input id="newProdImage" type="url" placeholder="Product image URL (optional)" />
+            <button id="addProductBtn" class="btn" type="button">Add Product</button>
+          </div>
+        </div>
+
+        <table id="ownerProductTable" class="data-table">
+          <thead>
+            <tr>
+              <th>Part Name</th>
+              <th>Category</th>
+              <th>SKU</th>
+              <th>Price (₹)</th>
+              <th>Stock</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Injected by app.js -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Orders Tab -->
+      <div id="ownerOrdersTab" class="tab-panel hidden">
+        <table id="ownerOrdersTable" class="data-table">
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Customer</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Payment</th>
+              <th>Payment Details</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Injected by app.js -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
