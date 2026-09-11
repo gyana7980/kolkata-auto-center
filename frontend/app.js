@@ -4,7 +4,7 @@
    API_BASE points at your locally running FastAPI server.
    ========================================================================= */
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "https://kolkata-auto-center-api.onrender.com";
 const OWNER_UPI = "9438108296@ybl";
 const OWNER_NAME = "admin7";
 const OWNER_EMAIL = "admin7@gmail.com";
