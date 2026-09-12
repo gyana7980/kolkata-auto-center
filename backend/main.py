@@ -260,7 +260,7 @@ def request_otp(body: RequestOtpBody):
             (email, otp, expires_at, body.name.strip() if body.name else ""),
         )
     send_real_otp(email, otp)
-    return {"message": "OTP generated. Check your email."}
+    return {"message": "OTP generated. Check the backend terminal."}
 
 
 @app.post("/auth/verify-otp")
@@ -285,7 +285,7 @@ def verify_otp(body: VerifyOtpBody):
 
         db.execute("DELETE FROM otps WHERE email=?", (email,))
 
-        is_owner = email == OWNER_EMAIL and row["name"].strip() == OWNER_NAME
+        is_owner = (email == OWNER_EMAIL)
         role = "owner" if is_owner else "customer"
         user_name = OWNER_NAME if is_owner else user["name"]
         token = create_jwt(user["email"], user_name, role)
