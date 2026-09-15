@@ -13,11 +13,15 @@ const OWNER_EMAIL = "admin7@gmail.com";
 
 function $(id) { return document.getElementById(id); }
 
-function toast(msg) {
+let toastTimer;
+
+function toast(msg, type = "info") {
   const t = $("toast");
   t.textContent = msg;
-  t.classList.add("show");
-  setTimeout(() => t.classList.remove("show"), 2200);
+  t.className = `toast ${type}`;
+  requestAnimationFrame(() => t.classList.add("show"));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
 }
 
 function money(n) { return "₹" + Number(n).toFixed(2); }
@@ -272,7 +276,7 @@ async function placeOrder() {
         items: cart.map(i => ({ product_id: i.product_id, name: i.name, qty: i.qty, price: i.price })),
       },
     });
-    toast("Order placed! Total " + money(order.total_amount));
+    toast("Order placed! Total " + money(order.total_amount), "success");
     setCart([]);
     $("cartOverlay").classList.remove("open");
     $("cartOverlay").classList.remove("checkout-mode");
@@ -280,7 +284,7 @@ async function placeOrder() {
     $("checkoutFormSection").classList.add("hidden");
     await loadProducts();
   } catch (e) {
-    toast(e.message);
+    toast(e.message, "error");
   }
 }
 
@@ -384,17 +388,17 @@ async function saveProductEdit(id) {
       auth: true,
       body: { price: newPrice, stock: newStock }
     });
-    toast("Updated successfully!");
+    toast("Updated successfully!", "success");
     await loadProducts();
   } catch (err) {
-    toast(err.message);
+    toast(err.message, "error");
   }
 }
 
 async function deleteProduct(id) {
   if (!confirm("Delete this part?")) return;
   await api(`/products/${id}`, { method: "DELETE", auth: true });
-  toast("Deleted");
+  toast("Deleted", "success");
   await loadOwnerProducts();
   await loadProducts();
   await loadCategories();
@@ -421,14 +425,31 @@ async function loadOwnerOrders() {
           ${statuses.map(s => `<option ${s === o.status ? "selected" : ""}>${s}</option>`).join("")}
         </select>
       </td>
-      <td><button class="btn small secondary" onclick='sendWhatsapp(${JSON.stringify(o).replace(/'/g, "&#39;")})'>WhatsApp</button></td>
+      <td class="order-actions">
+        <button class="btn small secondary" onclick='sendWhatsapp(${JSON.stringify(o).replace(/'/g, "&#39;")})'>WhatsApp</button>
+        ${["cancelled", "delivered"].includes((o.status || "").toLowerCase())
+          ? `<button class="btn small danger" onclick="deleteOrder('${o.id}')">Delete Order</button>`
+          : ""}
+      </td>
     </tr>
   `).join("");
 }
 
 async function updateOrderStatus(orderId, status) {
   await api(`/orders/${orderId}/status`, { method: "PUT", auth: true, body: { status } });
-  toast("Order status updated");
+  toast("Order status updated", "success");
+  await loadOwnerOrders();
+}
+
+async function deleteOrder(orderId) {
+  if (!confirm("Delete this order record?")) return;
+  try {
+    await api(`/orders/${orderId}`, { method: "DELETE", auth: true });
+    toast("Order deleted", "success");
+    await loadOwnerOrders();
+  } catch (err) {
+    toast(err.message, "error");
+  }
 }
 
 function sendWhatsapp(order) {

@@ -420,6 +420,19 @@ def update_status(order_id: str, body: StatusBody, authorization: Optional[str] 
         return {"message": "updated"}
 
 
+@app.delete("/orders/{order_id}")
+def delete_order(order_id: str, authorization: Optional[str] = Header(None)):
+    require_owner(authorization)
+    with get_db() as db:
+        order = db.execute("SELECT status FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not order:
+            raise HTTPException(404, "Order not found")
+        if (order["status"] or "").lower() not in {"cancelled", "delivered"}:
+            raise HTTPException(400, "Only cancelled or delivered orders can be deleted")
+        db.execute("DELETE FROM orders WHERE id=?", (order_id,))
+        return {"message": "deleted"}
+
+
 @app.get("/")
 def root():
     return {"message": "Kolkata Auto Center API is running. Visit /docs for interactive API docs."}
