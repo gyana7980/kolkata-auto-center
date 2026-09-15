@@ -116,6 +116,14 @@ def init_db():
             db.execute("ALTER TABLE orders ADD COLUMN items_data TEXT")
         except sqlite3.OperationalError:
             pass
+        db.execute("""CREATE TABLE IF NOT EXISTS order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            price REAL NOT NULL,
+            FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+        )""")
 
         # Seed a few sample products so the site isn't empty on first run.
         count = db.execute("SELECT COUNT(*) c FROM products").fetchone()["c"]
@@ -381,10 +389,15 @@ def create_order(body: OrderBody, authorization: Optional[str] = Header(None)):
 
     with get_db() as db:
         # check + deduct stock (FR-ORD-05)
+        quantities_by_product = {}
         for item in body.items:
-            prod = db.execute("SELECT stock FROM products WHERE id=?", (item.product_id,)).fetchone()
-            if not prod or prod["stock"] < item.qty:
-                raise HTTPException(400, f"Not enough stock for {item.name}")
+            if item.qty <= 0:
+                raise HTTPException(400, "Insufficient stock for item")
+            quantities_by_product[item.product_id] = quantities_by_product.get(item.product_id, 0) + item.qty
+        for product_id, quantity in quantities_by_product.items():
+            prod = db.execute("SELECT stock FROM products WHERE id=?", (product_id,)).fetchone()
+            if not prod or prod["stock"] < quantity:
+                raise HTTPException(400, "Insufficient stock for item")
         for item in body.items:
             db.execute("UPDATE products SET stock = stock - ? WHERE id=?", (item.qty, item.product_id))
 
@@ -402,6 +415,10 @@ def create_order(body: OrderBody, authorization: Optional[str] = Header(None)):
             (oid, user["email"], body.customer_name, body.phone, body.address,
                  body.payment_method, total, items_str, body.utr_number, body.transaction_id,
                  "Pending", time.time(), items_data),
+        )
+        db.executemany(
+            "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?,?,?,?)",
+            [(oid, item.product_id, item.qty, item.price) for item in body.items],
         )
         return {"id": oid, "total_amount": total}
 
@@ -437,7 +454,7 @@ def update_status(order_id: str, body: StatusBody, authorization: Optional[str] 
     is_cancellation = normalized_status == "Cancelled"
     with get_db() as db:
         order = db.execute(
-            "SELECT status, user_id, items_data FROM orders WHERE id=?", (order_id,)
+            "SELECT status, user_id, items, items_data FROM orders WHERE id=?", (order_id,)
         ).fetchone()
         if not order:
             raise HTTPException(404, "Order not found")
@@ -453,7 +470,13 @@ def update_status(order_id: str, body: StatusBody, authorization: Optional[str] 
             if (order["status"] or "").lower() == "cancelled":
                 raise HTTPException(400, "Order is already cancelled")
 
-            if order["items_data"]:
+            order_items = db.execute(
+                "SELECT product_id, quantity AS qty FROM order_items WHERE order_id=?",
+                (order_id,),
+            ).fetchall()
+            if order_items:
+                items = order_items
+            elif order["items_data"]:
                 try:
                     items = json.loads(order["items_data"])
                 except (TypeError, json.JSONDecodeError):
@@ -472,8 +495,12 @@ def update_status(order_id: str, body: StatusBody, authorization: Optional[str] 
                     items.append({"product_id": product["id"], "qty": int(match.group(2))})
 
             for item in items:
-                product_id = item.get("product_id")
-                quantity = item.get("qty")
+                if isinstance(item, sqlite3.Row):
+                    product_id = item["product_id"]
+                    quantity = item["qty"]
+                else:
+                    product_id = item.get("product_id")
+                    quantity = item.get("qty")
                 if not product_id or not isinstance(quantity, int) or quantity <= 0:
                     raise HTTPException(400, "Order inventory details are invalid")
                 product = db.execute("SELECT id FROM products WHERE id=?", (product_id,)).fetchone()
