@@ -28,7 +28,7 @@ function getUser() {
   return raw ? JSON.parse(raw) : null;
 }
 function isOwner(user) {
-  return user?.role === "owner" && user.name === OWNER_NAME && user.email?.toLowerCase() === OWNER_EMAIL;
+  return user?.role === "owner";
 }
 function setSession(token, user) {
   localStorage.setItem("kac_jwt_token", token);
