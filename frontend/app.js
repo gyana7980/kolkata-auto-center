@@ -13,15 +13,61 @@ const OWNER_EMAIL = "admin7@gmail.com";
 
 function $(id) { return document.getElementById(id); }
 
-let toastTimer;
+const toastIcons = {
+  success: "✓",
+  error: "×",
+  warning: "!",
+  info: "i",
+};
 
-function toast(msg, type = "info") {
-  const t = $("toast");
-  t.textContent = msg;
-  t.className = `toast ${type}`;
-  requestAnimationFrame(() => t.classList.add("show"));
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
+function dismissToast(card) {
+  if (!card || card.classList.contains("is-exiting")) return;
+  card.classList.add("is-exiting");
+  card.addEventListener("animationend", () => card.remove(), { once: true });
+}
+
+function toast(msg, type = "info", action) {
+  const container = $("toast");
+  const card = document.createElement("div");
+  const icon = document.createElement("span");
+  const content = document.createElement("span");
+  const close = document.createElement("button");
+
+  card.className = `toast-card ${type in toastIcons ? type : "info"}`;
+  card.setAttribute("role", type === "error" ? "alert" : "status");
+  icon.className = "toast-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = toastIcons[card.classList[1]];
+  content.className = "toast-message";
+  content.textContent = msg;
+  close.className = "toast-close";
+  close.type = "button";
+  close.setAttribute("aria-label", "Dismiss notification");
+  close.innerHTML = "&times;";
+  close.addEventListener("click", () => dismissToast(card));
+
+  card.append(icon, content);
+  if (action) {
+    const actionButton = document.createElement("button");
+    actionButton.className = "toast-action";
+    actionButton.type = "button";
+    actionButton.textContent = action.label;
+    actionButton.addEventListener("click", () => {
+      dismissToast(card);
+      action.onClick();
+    });
+    card.append(actionButton);
+  }
+  card.append(close);
+  card.addEventListener("click", (event) => {
+    if (event.target === card || event.target === icon || event.target === content) {
+      dismissToast(card);
+    }
+  });
+  container.append(card);
+  requestAnimationFrame(() => card.classList.add("is-visible"));
+  setTimeout(() => dismissToast(card), 3500);
+  return card;
 }
 
 function money(n) { return "₹" + Number(n).toFixed(2); }
@@ -396,12 +442,20 @@ async function saveProductEdit(id) {
 }
 
 async function deleteProduct(id) {
-  if (!confirm("Delete this part?")) return;
-  await api(`/products/${id}`, { method: "DELETE", auth: true });
-  toast("Deleted", "success");
-  await loadOwnerProducts();
-  await loadProducts();
-  await loadCategories();
+  toast("Delete this part?", "warning", {
+    label: "Delete",
+    onClick: async () => {
+      try {
+        await api(`/products/${id}`, { method: "DELETE", auth: true });
+        toast("Deleted", "success");
+        await loadOwnerProducts();
+        await loadProducts();
+        await loadCategories();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    },
+  });
 }
 
 async function loadOwnerOrders() {
@@ -442,14 +496,18 @@ async function updateOrderStatus(orderId, status) {
 }
 
 async function deleteOrder(orderId) {
-  if (!confirm("Delete this order record?")) return;
-  try {
-    await api(`/orders/${orderId}`, { method: "DELETE", auth: true });
-    toast("Order deleted", "success");
-    await loadOwnerOrders();
-  } catch (err) {
-    toast(err.message, "error");
-  }
+  toast("Delete this order record?", "warning", {
+    label: "Delete",
+    onClick: async () => {
+      try {
+        await api(`/orders/${orderId}`, { method: "DELETE", auth: true });
+        toast("Order deleted", "success");
+        await loadOwnerOrders();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    },
+  });
 }
 
 function sendWhatsapp(order) {
