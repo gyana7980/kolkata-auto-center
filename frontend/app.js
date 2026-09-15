@@ -160,41 +160,85 @@ function renderProducts() {
       <div class="meta">${p.category} · SKU ${p.sku}</div>
       ${stockBadge(p.stock)}
       <div class="price">${money(p.price)}</div>
-      <button class="btn" ${p.stock === 0 ? "disabled" : ""} onclick="addToCart('${p.id}')">
+      <div class="product-purchase">
+        <div class="quantity-control" aria-label="Quantity for ${p.name}">
+          <button type="button" aria-label="Decrease quantity" ${p.stock === 0 ? "disabled" : ""} onclick="changeProductQty('${p.id}', -1)">−</button>
+          <input id="productQty_${p.id}" type="number" min="1" max="${p.stock}" value="1" ${p.stock === 0 ? "disabled" : ""} onchange="setProductQty('${p.id}', this.value)" aria-label="Selected quantity" />
+          <button type="button" aria-label="Increase quantity" ${p.stock === 0 ? "disabled" : ""} onclick="changeProductQty('${p.id}', 1)">+</button>
+        </div>
+        <button class="btn" ${p.stock === 0 ? "disabled" : ""} onclick="addToCart('${p.id}')">
         ${p.stock === 0 ? "Out of stock" : "Add to Cart"}
-      </button>
+        </button>
+      </div>
     </div>
   `).join("");
 }
 
 // ---- Cart -------------------------------------------------------------
 
+function getProductStock(productId, fallback = 0) {
+  const product = allProducts.find(item => item.id === productId);
+  return product ? product.stock : fallback;
+}
+
+function getProductQty(productId) {
+  const input = $("productQty_" + productId);
+  return input ? Math.max(1, parseInt(input.value, 10) || 1) : 1;
+}
+
+function setProductQty(productId, value) {
+  const input = $("productQty_" + productId);
+  const product = allProducts.find(item => item.id === productId);
+  if (!input || !product) return;
+  const quantity = Math.min(product.stock, Math.max(1, parseInt(value, 10) || 1));
+  input.value = quantity;
+}
+
+function changeProductQty(productId, delta) {
+  const input = $("productQty_" + productId);
+  if (!input) return;
+  setProductQty(productId, getProductQty(productId) + delta);
+}
+
 function addToCart(productId) {
   const product = allProducts.find(p => p.id === productId);
   if (!product) return;
+  const selectedQty = getProductQty(productId);
   const cart = getCart();
   const existing = cart.find(i => i.product_id === productId);
   if (existing) {
-    if (existing.qty >= product.stock) { toast("No more stock available"); return; }
-    existing.qty += 1;
+    const remaining = product.stock - existing.qty;
+    if (remaining <= 0) { toast("No more stock available", "warning"); return; }
+    existing.qty += Math.min(selectedQty, remaining);
   } else {
-    cart.push({ product_id: product.id, name: product.name, price: product.price, qty: 1, maxStock: product.stock });
+    cart.push({ product_id: product.id, name: product.name, price: product.price, qty: selectedQty, maxStock: product.stock });
   }
   setCart(cart);
-  toast("Added to cart");
+  toast(`Added ${selectedQty} item${selectedQty === 1 ? "" : "s"} to cart`, "success");
 }
 
 function changeQty(productId, delta) {
   const cart = getCart();
   const item = cart.find(i => i.product_id === productId);
   if (!item) return;
-  item.qty += delta;
-  if (item.qty <= 0) {
+  const maxStock = getProductStock(productId, item.maxStock);
+  const nextQty = item.qty + delta;
+  if (nextQty <= 0) {
     setCart(cart.filter(i => i.product_id !== productId));
+  } else if (nextQty > maxStock) {
+    toast("No more stock available", "warning");
   } else {
+    item.qty = nextQty;
+    item.maxStock = maxStock;
     setCart(cart);
   }
   renderCart();
+}
+
+function removeFromCart(productId) {
+  setCart(getCart().filter(item => item.product_id !== productId));
+  renderCart();
+  toast("Item removed from cart", "info");
 }
 
 function cartTotalAmount() {
@@ -219,12 +263,14 @@ function renderCart() {
         <div class="info">
           <div>${i.name}</div>
           <div class="meta">${money(i.price)} each</div>
+          <div class="cart-subtotal">${money(i.price * i.qty)}</div>
         </div>
         <div class="qty-ctrl">
-          <button onclick="changeQty('${i.product_id}', -1)">-</button>
-          <span>${i.qty}</span>
-          <button onclick="changeQty('${i.product_id}', 1)">+</button>
+          <button type="button" aria-label="Decrease quantity" onclick="changeQty('${i.product_id}', -1)">−</button>
+          <span aria-live="polite">${i.qty}</span>
+          <button type="button" aria-label="Increase quantity" ${i.qty >= getProductStock(i.product_id, i.maxStock) ? "disabled" : ""} onclick="changeQty('${i.product_id}', 1)">+</button>
         </div>
+        <button class="cart-remove" type="button" aria-label="Remove ${i.name} from cart" onclick="removeFromCart('${i.product_id}')">&times;</button>
       </div>
     `).join("");
   }
