@@ -15,6 +15,7 @@ That's it. The server will start at http://127.0.0.1:8000
 
 import os
 import re
+import json
 import sqlite3
 import time
 import uuid
@@ -109,6 +110,10 @@ def init_db():
         )""")
         try:
             db.execute("ALTER TABLE orders ADD COLUMN transaction_id TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute("ALTER TABLE orders ADD COLUMN items_data TEXT")
         except sqlite3.OperationalError:
             pass
 
@@ -385,15 +390,18 @@ def create_order(body: OrderBody, authorization: Optional[str] = Header(None)):
 
         total = sum(i.qty * i.price for i in body.items)
         items_str = "; ".join(f"{i.name} x{i.qty} (Rs.{i.price})" for i in body.items)
+        items_data = json.dumps([
+            {"product_id": i.product_id, "qty": i.qty} for i in body.items
+        ])
         oid = uuid.uuid4().hex
 
         db.execute(
                 """INSERT INTO orders (id,user_id,customer_name,phone,address,payment_method,
-                    total_amount,items,utr_number,transaction_id,status,created_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    total_amount,items,utr_number,transaction_id,status,created_at,items_data)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (oid, user["email"], body.customer_name, body.phone, body.address,
                  body.payment_method, total, items_str, body.utr_number, body.transaction_id,
-                 "Pending", time.time()),
+                 "Pending", time.time(), items_data),
         )
         return {"id": oid, "total_amount": total}
 
@@ -418,12 +426,72 @@ def all_orders(authorization: Optional[str] = Header(None)):
 
 @app.put("/orders/{order_id}/status")
 def update_status(order_id: str, body: StatusBody, authorization: Optional[str] = Header(None)):
-    require_owner(authorization)
     allowed = {"Pending", "Confirmed", "Dispatched", "Delivered", "Cancelled"}
-    if body.status not in allowed:
+    normalized_status = next(
+        (status for status in allowed if status.lower() == body.status.strip().lower()),
+        None,
+    )
+    if not normalized_status:
         raise HTTPException(400, "Invalid status")
+    user = current_user(authorization)
+    is_cancellation = normalized_status == "Cancelled"
     with get_db() as db:
-        db.execute("UPDATE orders SET status=? WHERE id=?", (body.status, order_id))
+        order = db.execute(
+            "SELECT status, user_id, items_data FROM orders WHERE id=?", (order_id,)
+        ).fetchone()
+        if not order:
+            raise HTTPException(404, "Order not found")
+
+        if is_cancellation:
+            is_owner = (
+                user.get("role") == "owner"
+                and user.get("name") == OWNER_NAME
+                and user.get("email", "").lower() == OWNER_EMAIL
+            )
+            if not is_owner and order["user_id"] != user.get("email"):
+                raise HTTPException(403, "You can only cancel your own orders")
+            if (order["status"] or "").lower() == "cancelled":
+                raise HTTPException(400, "Order is already cancelled")
+
+            if order["items_data"]:
+                try:
+                    items = json.loads(order["items_data"])
+                except (TypeError, json.JSONDecodeError):
+                    raise HTTPException(400, "Order inventory details are invalid")
+            else:
+                items = []
+                for legacy_item in (order["items"] or "").split(";"):
+                    match = re.fullmatch(r"\s*(.+?) x(\d+) \(Rs\.[^)]+\)\s*", legacy_item)
+                    if not match:
+                        raise HTTPException(400, "Order inventory details are unavailable")
+                    product = db.execute(
+                        "SELECT id FROM products WHERE name=? LIMIT 1", (match.group(1),)
+                    ).fetchone()
+                    if not product:
+                        raise HTTPException(400, "A product in this order no longer exists")
+                    items.append({"product_id": product["id"], "qty": int(match.group(2))})
+
+            for item in items:
+                product_id = item.get("product_id")
+                quantity = item.get("qty")
+                if not product_id or not isinstance(quantity, int) or quantity <= 0:
+                    raise HTTPException(400, "Order inventory details are invalid")
+                product = db.execute("SELECT id FROM products WHERE id=?", (product_id,)).fetchone()
+                if not product:
+                    raise HTTPException(400, "A product in this order no longer exists")
+                db.execute(
+                    "UPDATE products SET stock = stock + ? WHERE id=?",
+                    (quantity, product_id),
+                )
+
+        elif not (
+            user.get("role") == "owner"
+            and user.get("name") == OWNER_NAME
+            and user.get("email", "").lower() == OWNER_EMAIL
+        ):
+            raise HTTPException(403, "Owner access only")
+
+        db.execute("UPDATE orders SET status=? WHERE id=?", (normalized_status, order_id))
         return {"message": "updated"}
 
 
