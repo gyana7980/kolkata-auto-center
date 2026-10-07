@@ -279,6 +279,8 @@ function renderCart() {
 
 // ---- Auth / login flow --------------------------------------------------
 
+let authMode = "signin";
+
 function refreshUserUI() {
   const user = getUser();
   const owner = isOwner(user);
@@ -615,25 +617,44 @@ $("paymentMethodSelect").addEventListener("change", () => {
 });
 
 function openLoginModal() {
+  setAuthMode("signin");
   $("loginStep1").classList.remove("hidden");
   $("loginStep2").classList.add("hidden");
+  $("authModeTabs").classList.remove("hidden");
   $("loginOverlay").classList.add("open");
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const signingUp = mode === "signup";
+  $("signupNameField").classList.toggle("hidden", !signingUp);
+  $("signupPhoneField").classList.toggle("hidden", !signingUp);
+  $("loginName").required = signingUp;
+  $("signInTab").classList.toggle("active", !signingUp);
+  $("signUpTab").classList.toggle("active", signingUp);
+  $("signInTab").setAttribute("aria-selected", String(!signingUp));
+  $("signUpTab").setAttribute("aria-selected", String(signingUp));
+  $("loginTitle").textContent = signingUp ? "Create Your Account" : "Sign In with Email OTP";
 }
 
 $("navLoginBtn").addEventListener("click", () => {
   openLoginModal();
 });
+$("signInTab").addEventListener("click", () => setAuthMode("signin"));
+$("signUpTab").addEventListener("click", () => setAuthMode("signup"));
 $("cancelLoginBtn").addEventListener("click", () => $("loginOverlay").classList.remove("open"));
 $("closeLoginBtn").addEventListener("click", () => $("loginOverlay").classList.remove("open"));
 $("backLoginBtn").addEventListener("click", () => {
   $("loginStep1").classList.remove("hidden");
   $("loginStep2").classList.add("hidden");
+  $("authModeTabs").classList.remove("hidden");
 });
 
 function showOtpStep() {
   $("loginOverlay").classList.add("open");
   $("loginStep1").classList.add("hidden");
   $("loginStep2").classList.remove("hidden");
+  $("authModeTabs").classList.add("hidden");
   $("loginOtp").value = "";
   $("loginOtp").focus();
 }
@@ -644,14 +665,28 @@ $("sendOtpBtn").addEventListener("click", async (e) => {
   e.stopPropagation();
   
   const email = $("loginEmail").value.trim();
-  const name = $("loginName").value.trim() || email.split("@")[0];
+  const name = $("loginName").value.trim();
+  const phone = $("loginPhone").value.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     toast("Enter a valid email address");
     return;
   }
+  if (authMode === "signup" && !name) {
+    toast("Enter your full name to create an account");
+    $("loginName").focus();
+    return;
+  }
   
   try {
-    await api("/auth/request-otp", { method: "POST", body: { email, name } });
+    await api("/auth/request-otp", {
+      method: "POST",
+      body: {
+        email,
+        name: authMode === "signup" ? name : "",
+        phone: authMode === "signup" ? phone : "",
+        mode: authMode,
+      },
+    });
     showOtpStep();
     toast("OTP sent to your mail id.");
   } catch (err) {
@@ -673,7 +708,9 @@ $("verifyOtpBtn").addEventListener("click", async () => {
       $("cartOverlay").classList.add("open");
       openCheckout();
     }
-    toast("Welcome, " + result.user.name + "!");
+    toast(result.is_new_user
+      ? "Account created successfully!"
+      : "Welcome back, " + result.user.name + "!");
   } catch (e) { toast(e.message); }
 });
 

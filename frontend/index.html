@@ -30,7 +30,7 @@
     <nav class="nav-links">
       <button id="navOrdersBtn" class="btn secondary hidden" type="button">My Orders</button>
       <button id="navDashboardBtn" class="btn secondary hidden" type="button">Owner Dashboard</button>
-      <button id="navLoginBtn" class="btn" type="button">Login</button>
+      <button id="navLoginBtn" class="btn" type="button">Sign In / Sign Up</button>
       <div id="userBadge" class="user-badge hidden">
         <span id="userNameDisplay"></span>
         <button id="logoutBtn" class="link-btn" type="button">Logout</button>
@@ -53,21 +53,33 @@
     </div>
   </main>
 
-  <!-- Login / OTP Overlay Modal -->
+  <!-- Sign In / Sign Up / OTP Overlay Modal -->
   <div id="loginOverlay" class="overlay">
     <div class="dialog">
       <div class="dialog-header">
-        <h3 id="loginTitle">Login with Email OTP</h3>
+        <h3 id="loginTitle">Continue with Email OTP</h3>
         <button class="icon-close" id="closeLoginBtn" type="button">&times;</button>
+      </div>
+
+      <div id="authModeTabs" class="dashboard-tabs" role="tablist" aria-label="Account access">
+        <button id="signInTab" class="tab-btn active" type="button" role="tab" aria-selected="true">Sign In</button>
+        <button id="signUpTab" class="tab-btn" type="button" role="tab" aria-selected="false">Create Account</button>
       </div>
 
       <!-- Step 1: Request OTP -->
       <div id="loginStep1" class="form-body">
-        <label>Your Name</label>
-        <input id="loginName" type="text" placeholder="Enter your name" />
+        <div id="signupNameField" class="hidden">
+          <label for="loginName">Full Name</label>
+          <input id="loginName" type="text" autocomplete="name" placeholder="Enter your full name" />
+        </div>
 
-        <label>Email Address</label>
-        <input id="loginEmail" type="email" placeholder="Enter your email address" />
+        <label for="loginEmail">Email Address</label>
+        <input id="loginEmail" type="email" autocomplete="email" placeholder="Enter your email address" />
+
+        <div id="signupPhoneField" class="hidden">
+          <label for="loginPhone">Phone Number (Optional)</label>
+          <input id="loginPhone" type="tel" autocomplete="tel" placeholder="Enter your phone number" />
+        </div>
 
         <p class="help-text"></p>
         <div class="modal-actions">

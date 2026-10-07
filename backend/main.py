@@ -29,8 +29,6 @@ from fastapi import FastAPI, HTTPException, Header, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
-import smtplib
-from email.message import EmailMessage
 
 # ---------------------------------------------------------------------------
 # 1. BASIC SETUP
@@ -81,14 +79,26 @@ def init_db():
         db.execute("""CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
-            name TEXT
+            name TEXT,
+            phone TEXT,
+            role TEXT NOT NULL DEFAULT 'customer'
         )""")
         db.execute("""CREATE TABLE IF NOT EXISTS otps (
             email TEXT PRIMARY KEY,
             otp TEXT NOT NULL,
             expires_at REAL NOT NULL,
-            name TEXT
+            name TEXT,
+            phone TEXT
         )""")
+        for table, column_definition in (
+            ("users", "phone TEXT"),
+            ("users", "role TEXT NOT NULL DEFAULT 'customer'"),
+            ("otps", "phone TEXT"),
+        ):
+            column_name = column_definition.split()[0]
+            columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}
+            if column_name not in columns:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column_definition}")
         db.execute("""CREATE TABLE IF NOT EXISTS products (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -189,6 +199,8 @@ def require_owner(authorization: Optional[str]):
 class RequestOtpBody(BaseModel):
     email: str
     name: Optional[str] = None
+    phone: Optional[str] = None
+    mode: str = "signin"
 
 
 class VerifyOtpBody(BaseModel):
@@ -236,51 +248,46 @@ class StatusBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.post("/auth/request-otp")
-def request_otp(payload: dict):
-    email = payload.get("email", "").strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="A valid email address is required")
+def request_otp(body: RequestOtpBody):
+    email = body.email.strip().lower()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
+    if body.mode not in {"signin", "signup"}:
+        raise HTTPException(status_code=400, detail="Invalid account mode")
 
-    # Generate 6-digit random code
-    otp = f"{random.randint(100000, 999999)}"
-    expires_at = datetime.utcnow() + timedelta(minutes=10)
+    name = (body.name or "").strip()
+    phone = (body.phone or "").strip()
+    if body.mode == "signup" and not name:
+        raise HTTPException(status_code=400, detail="Full name is required to create an account")
 
-    # Save OTP to SQLite database
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO otps (email, otp, expires_at)
-        VALUES (?, ?, ?)
-    """, (email, otp, expires_at.isoformat()))
-    conn.commit()
-    conn.close()
+    otp = TEST_OTP if email == TEST_EMAIL else f"{random.randint(0, 999999):06d}"
+    expires_at = time.time() + OTP_TTL_SECONDS
+    with get_db() as db:
+        db.execute(
+            "INSERT INTO otps (email, otp, expires_at, name, phone) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(email) DO UPDATE SET otp=excluded.otp, expires_at=excluded.expires_at, "
+            "name=excluded.name, phone=excluded.phone",
+            (email, otp, expires_at, name, phone),
+        )
 
-    # Send OTP using Gmail SMTP
     if SMTP_PASSWORD:
         try:
             msg = EmailMessage()
-            msg["Subject"] = "Your Verification Code - Kolkata Auto Center"
+            msg["Subject"] = "Your Login Verification Code - Kolkata Auto Center"
             msg["From"] = f"Kolkata Auto Center <{SMTP_EMAIL}>"
             msg["To"] = email
             msg.set_content(
-                f"Hello,\n\n"
-                f"Your login verification code for Kolkata Auto Center is: {otp}\n\n"
-                f"This code will expire in 10 minutes.\n\n"
-                f"If you did not request this code, please ignore this email."
+                f"Your Kolkata Auto Center verification code is: {otp}\n\n"
+                "This code will expire in 10 minutes."
             )
-
             with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
                 server.login(SMTP_EMAIL, SMTP_PASSWORD)
                 server.send_message(msg)
-
-            print(f"[OTP SUCCESS] Sent verification email to {email}")
+            print(f"[OTP LOG] Successfully sent OTP to {email}")
         except Exception as e:
             print(f"[SMTP ERROR] Failed to send email to {email}: {e}")
-            # Fallback printed to logs so you never get locked out during setup
-            print(f"[FALLBACK LOG] Code for {email} is: {otp}")
     else:
         print(f"[DEV FALLBACK] No SMTP_PASSWORD set. OTP for {email} is: {otp}")
-
     return {"message": "OTP sent successfully"}
 
 
@@ -299,12 +306,25 @@ def verify_otp(body: VerifyOtpBody):
                 raise HTTPException(400, "Incorrect OTP")
 
         user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        is_new_user = user is None
         if not user:
+            user_name = (row["name"] if row else "") or email.split("@")[0]
+            user_phone = row["phone"] if row and row["phone"] else None
             db.execute(
-                "INSERT INTO users (id, email, name) VALUES (?,?,?)",
-                (uuid.uuid4().hex, email, (row["name"] if row else "") or email.split("@")[0]),
+                "INSERT INTO users (id, email, name, phone, role) VALUES (?,?,?,?,?)",
+                (uuid.uuid4().hex, email, user_name, user_phone, "customer"),
             )
             user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        elif row:
+            signup_name = (row["name"] or "").strip()
+            signup_phone = (row["phone"] or "").strip()
+            if signup_name or signup_phone:
+                db.execute(
+                    "UPDATE users SET name=CASE WHEN ? != '' THEN ? ELSE name END, "
+                    "phone=CASE WHEN ? != '' THEN ? ELSE phone END WHERE email=?",
+                    (signup_name, signup_name, signup_phone, signup_phone, email),
+                )
+                user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
 
         db.execute("DELETE FROM otps WHERE email=?", (email,))
 
@@ -312,7 +332,16 @@ def verify_otp(body: VerifyOtpBody):
         role = "owner" if is_owner else "customer"
         user_name = OWNER_NAME if is_owner else user["name"]
         token = create_jwt(user["email"], user_name, role)
-        return {"token": token, "user": {"email": user["email"], "name": user_name, "role": role}}
+        return {
+            "token": token,
+            "user": {
+                "email": user["email"],
+                "name": user_name,
+                "phone": user["phone"],
+                "role": role,
+            },
+            "is_new_user": is_new_user,
+        }
 
 
 # ---------------------------------------------------------------------------
