@@ -270,24 +270,35 @@ def request_otp(body: RequestOtpBody):
             (email, otp, expires_at, name, phone),
         )
 
+    # Send OTP using Gmail SMTP (Port 587 STARTTLS)
     if SMTP_PASSWORD:
         try:
             msg = EmailMessage()
-            msg["Subject"] = "Your Login Verification Code - Kolkata Auto Center"
+            msg["Subject"] = "Your Verification Code - Kolkata Auto Center"
             msg["From"] = f"Kolkata Auto Center <{SMTP_EMAIL}>"
             msg["To"] = email
             msg.set_content(
-                f"Your Kolkata Auto Center verification code is: {otp}\n\n"
-                "This code will expire in 10 minutes."
+                f"Hello,\n\n"
+                f"Your login verification code for Kolkata Auto Center is: {otp}\n\n"
+                f"This code will expire in 10 minutes.\n\n"
+                f"If you did not request this code, please ignore this email."
             )
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+
+            # Use port 587 with a 10s timeout to prevent hanging
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
                 server.login(SMTP_EMAIL, SMTP_PASSWORD)
                 server.send_message(msg)
-            print(f"[OTP LOG] Successfully sent OTP to {email}")
+
+            print(f"[OTP SUCCESS] Sent verification email to {email}")
         except Exception as e:
             print(f"[SMTP ERROR] Failed to send email to {email}: {e}")
+            print(f"[FALLBACK LOG] Code for {email} is: {otp}")
     else:
         print(f"[DEV FALLBACK] No SMTP_PASSWORD set. OTP for {email} is: {otp}")
+
     return {"message": "OTP sent successfully"}
 
 
