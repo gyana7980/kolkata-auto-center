@@ -19,6 +19,8 @@ import json
 import sqlite3
 import time
 import uuid
+import json
+import urllib.request
 import random
 import smtplib
 from contextlib import contextmanager
@@ -42,6 +44,8 @@ OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "admin7@gmail.com").lower()
 TEST_EMAIL = "test@kolkataauto.com"
 TEST_OTP = "123456"
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-me-in-production")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "").strip()
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "adminkackpr@gmail.com").strip()
 SMTP_EMAIL = os.environ.get("SMTP_EMAIL", "adminkackpr@gmail.com").strip()
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "").strip()
 JWT_ALGO = "HS256"
@@ -270,34 +274,36 @@ def request_otp(body: RequestOtpBody):
             (email, otp, expires_at, name, phone),
         )
 
-    # Send OTP using Gmail SMTP (Port 587 STARTTLS)
-    if SMTP_PASSWORD:
+    # Send email via Brevo REST API (HTTPS Port 443)
+    if BREVO_API_KEY:
         try:
-            msg = EmailMessage()
-            msg["Subject"] = "Your Verification Code - Kolkata Auto Center"
-            msg["From"] = f"Kolkata Auto Center <{SMTP_EMAIL}>"
-            msg["To"] = email
-            msg.set_content(
-                f"Hello,\n\n"
-                f"Your login verification code for Kolkata Auto Center is: {otp}\n\n"
-                f"This code will expire in 10 minutes.\n\n"
-                f"If you did not request this code, please ignore this email."
+            url = "https://api.brevo.com/v3/smtp/email"
+            req_data = {
+                "sender": {"name": "Kolkata Auto Center", "email": SENDER_EMAIL},
+                "to": [{"email": email}],
+                "subject": "Your Verification Code - Kolkata Auto Center",
+                "htmlContent": (
+                    f"<p>Hello,</p>"
+                    f"<p>Your verification code for Kolkata Auto Center is: <strong>{otp}</strong></p>"
+                    f"<p>Valid for 10 minutes.</p>"
+                )
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(req_data).encode("utf-8"),
+                headers={
+                    "api-key": BREVO_API_KEY,
+                    "Content-Type": "application/json",
+                    "accept": "application/json"
+                }
             )
-
-            # Use port 587 with a 10s timeout to prevent hanging
-            with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(SMTP_EMAIL, SMTP_PASSWORD)
-                server.send_message(msg)
-
-            print(f"[OTP SUCCESS] Sent verification email to {email}")
+            with urllib.request.urlopen(req, timeout=10) as response:
+                print(f"[BREVO SUCCESS] Email sent to {email}, Status: {response.status}")
         except Exception as e:
-            print(f"[SMTP ERROR] Failed to send email to {email}: {e}")
+            print(f"[BREVO ERROR] Failed to send email: {e}")
             print(f"[FALLBACK LOG] Code for {email} is: {otp}")
     else:
-        print(f"[DEV FALLBACK] No SMTP_PASSWORD set. OTP for {email} is: {otp}")
+        print(f"[DEV FALLBACK] No BREVO_API_KEY set. OTP for {email} is: {otp}")
 
     return {"message": "OTP sent successfully"}
 
