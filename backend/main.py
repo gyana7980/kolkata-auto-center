@@ -20,8 +20,9 @@ import sqlite3
 import time
 import uuid
 import random
-import requests
+import smtplib
 from contextlib import contextmanager
+from email.message import EmailMessage
 
 import jwt
 from fastapi import FastAPI, HTTPException, Header, Query, Response
@@ -41,7 +42,8 @@ OWNER_EMAIL = os.environ.get("OWNER_EMAIL", "admin7@gmail.com").lower()
 TEST_EMAIL = "test@kolkataauto.com"
 TEST_OTP = "123456"
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-me-in-production")
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+SMTP_EMAIL = os.environ.get("SMTP_EMAIL", "adminkackpr@gmail.com").strip()
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "").strip()
 JWT_ALGO = "HS256"
 OTP_TTL_SECONDS = 10 * 60  # 10 minutes
 
@@ -178,36 +180,6 @@ def require_owner(authorization: Optional[str]):
     return user
 
 
-def send_real_otp(to_email: str, otp: str):
-    # If no email API key is configured (local testing), print to the terminal
-    if not RESEND_API_KEY:
-        print(f"\n==================================================")
-        print(f"  [LOCAL MODE] OTP for {to_email} is: {otp}")
-        print(f"==================================================\n", flush=True)
-        return
-
-    # Real email delivery when deployed with an API key
-    try:
-        res = requests.post(
-            "https://api.resend.com/emails",
-            headers={
-                "Authorization": f"Bearer {RESEND_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "from": "Kolkata Auto Center <onboarding@resend.dev>",
-                "to": [to_email],
-                "subject": f"Your Kolkata Auto Center OTP is {otp}",
-                "html": f"<p>Your login OTP code is: <strong>{otp}</strong>. It expires in 10 minutes.</p>",
-            },
-            timeout=10,
-        )
-        if res.status_code >= 400:
-            print("Email delivery failed:", res.text, flush=True)
-    except Exception as e:
-        print("Email sending error:", e, flush=True)
-
-
 # ---------------------------------------------------------------------------
 # 4. REQUEST/RESPONSE MODELS
 # ---------------------------------------------------------------------------
@@ -275,10 +247,24 @@ def request_otp(body: RequestOtpBody):
             "ON CONFLICT(email) DO UPDATE SET otp=excluded.otp, expires_at=excluded.expires_at, name=excluded.name",
             (email, otp, expires_at, body.name.strip() if body.name else ""),
         )
-    if is_test_account:
-        return {"message": "OTP sent successfully"}
-    send_real_otp(email, otp)
-    return {"message": "OTP generated. Check the backend terminal."}
+    if SMTP_PASSWORD:
+        msg = EmailMessage()
+        msg["Subject"] = "Your Login Verification Code - Kolkata Auto Center"
+        msg["From"] = f"Kolkata Auto Center <{SMTP_EMAIL}>"
+        msg["To"] = email
+        msg.set_content(
+            f"Your Kolkata Auto Center verification code is: {otp}\n\n"
+            "This code will expire in 10 minutes."
+        )
+
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(SMTP_EMAIL, SMTP_PASSWORD)
+                server.send_message(msg)
+            print(f"[OTP LOG] Successfully sent OTP to {email}")
+        except Exception as e:
+            print("Email sending error:", e, flush=True)
+    return {"message": "OTP sent successfully"}
 
 
 @app.post("/auth/verify-otp")
