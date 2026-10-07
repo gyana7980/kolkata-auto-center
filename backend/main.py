@@ -293,8 +293,9 @@ def request_otp(body: RequestOtpBody):
                 data=json.dumps(req_data).encode("utf-8"),
                 headers={
                     "api-key": BREVO_API_KEY,
+                    "x-sib-api-key": BREVO_API_KEY,
                     "Content-Type": "application/json",
-                    "accept": "application/json"
+                    "Accept": "application/json"
                 }
             )
             with urllib.request.urlopen(req, timeout=10) as response:
