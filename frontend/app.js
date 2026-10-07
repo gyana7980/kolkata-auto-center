@@ -676,7 +676,11 @@ $("sendOtpBtn").addEventListener("click", async (e) => {
     $("loginName").focus();
     return;
   }
-  
+
+  const sendButton = $("sendOtpBtn");
+  sendButton.disabled = true;
+  sendButton.textContent = "Sending...";
+  toast("Sending verification code...");
   try {
     await api("/auth/request-otp", {
       method: "POST",
@@ -692,6 +696,9 @@ $("sendOtpBtn").addEventListener("click", async (e) => {
   } catch (err) {
     $("loginOverlay").classList.add("open");
     toast(err.message);
+  } finally {
+    sendButton.disabled = false;
+    sendButton.textContent = "Send OTP";
   }
 });
 
