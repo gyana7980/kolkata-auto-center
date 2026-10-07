@@ -85,17 +85,30 @@ function setSession(token, user) {
   localStorage.setItem("kac_user", JSON.stringify(user));
 }
 function clearSession() {
-  localStorage.removeItem("kac_jwt_token");
-  localStorage.removeItem("kac_user");
+  ["token", "user", "kac_token", "kac_jwt_token", "kac_user"].forEach((key) => {
+    localStorage.removeItem(key);
+  });
 }
+
+let cart = [];
 
 function getCart() {
   const raw = localStorage.getItem("kac_cart");
-  return raw ? JSON.parse(raw) : [];
+  cart = raw ? JSON.parse(raw) : [];
+  return cart;
 }
-function setCart(cart) {
+function setCart(items) {
+  cart = items;
   localStorage.setItem("kac_cart", JSON.stringify(cart));
   renderCartCount();
+}
+function clearCart() {
+  ["cart", "kac_cart", "cart_data"].forEach((key) => {
+    localStorage.removeItem(key);
+  });
+  cart = [];
+  renderCartCount();
+  renderCart();
 }
 
 async function api(path, { method = "GET", body, auth = false } = {}) {
@@ -283,8 +296,9 @@ let authMode = "signin";
 
 function refreshUserUI() {
   const user = getUser();
-  const owner = isOwner(user);
-  if (user) {
+  const loggedIn = Boolean(user && getToken());
+  const owner = loggedIn && isOwner(user);
+  if (loggedIn) {
     $("navLoginBtn").classList.add("hidden");
     $("logoutBtn").classList.remove("hidden");
     $("userBadge").classList.remove("hidden");
@@ -294,11 +308,13 @@ function refreshUserUI() {
     $("navDashboardBtn").classList.toggle("hidden", !owner);
   } else {
     $("navLoginBtn").classList.remove("hidden");
+    $("navLoginBtn").textContent = "Sign In / Sign Up";
     $("logoutBtn").classList.add("hidden");
     $("userBadge").classList.add("hidden");
     $("navOrdersBtn").classList.add("hidden");
     $("navDashboardBtn").classList.add("hidden");
-    //$("cartBtn").classList.add("hidden");
+    $("cartBtn").classList.add("hidden");
+    $("cartOverlay").classList.remove("open", "checkout-mode");
   }
 }
 
@@ -723,8 +739,14 @@ $("verifyOtpBtn").addEventListener("click", async () => {
 
 $("logoutBtn").addEventListener("click", () => {
   clearSession();
+  clearCart();
+  $("cartOverlay").classList.remove("open", "checkout-mode");
+  $("checkoutFormSection").classList.add("hidden");
+  $("upiFieldSection").classList.add("hidden");
+  $("cartDialogTitle").textContent = "Shopping Cart";
   refreshUserUI();
   $("ownerOverlay").classList.remove("open");
+  $("ordersOverlay").classList.remove("open");
   toast("Logged out");
 });
 
